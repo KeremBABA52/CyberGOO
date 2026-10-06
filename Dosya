@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cyber Space Chase 2077 - Fixed Edition</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 15px;
+            z-index: 10;
+        }
+        .hud-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            font-size: 16px;
+            font-weight: bold;
+            color: #0ff;
+            text-shadow: 0 0 10px #0ff;
+        }
+        .hud-left {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .combo-box {
+            color: #ff00ff;
+            font-size: 1.1rem;
+            text-shadow: 0 0 10px #ff00ff;
+        }
+        .hud-controls {
+            display: flex;
+            gap: 8px;
+            pointer-events: auto;
+        }
+        .cyber-btn-sm {
+            background: rgba(0, 255, 255, 0.2);
+            color: #0ff;
+            border: 2px solid #0ff;
+            padding: 8px 12px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 4px;
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+            transition: all 0.15s ease;
+            pointer-events: auto;
+        }
+        .cyber-btn-sm:active {
+            background: #0ff;
+            color: #000;
+        }
+        #screen-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(3, 0, 10, 0.94);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            pointer-events: auto;
+            z-index: 1000;
+            transition: opacity 0.3s ease;
+        }
+        h1 {
+            color: #f0f;
+            font-size: 2.2rem;
+            margin: 0 0 10px 0;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            text-shadow: 0 0 15px #f0f, 0 0 30px #00ffff;
+            text-align: center;
+        }
+        p {
+            color: #ccc;
+            font-size: 1rem;
+            margin-bottom: 25px;
+            text-align: center;
+            max-width: 85%;
+            line-height: 1.4;
+        }
+        .cyber-btn {
+            position: relative;
+            z-index: 1001;
+            pointer-events: auto;
+            background: transparent;
+            color: #0ff;
+            border: 2px solid #0ff;
+            padding: 14px 35px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.4);
+            transition: all 0.15s ease;
+            border-radius: 4px;
+        }
+        .cyber-btn:active {
+            background: #0ff;
+            color: #000;
+            box-shadow: 0 0 30px #0ff;
+            transform: scale(0.96);
+        }
+        .controls-hint {
+            position: absolute;
+            bottom: 15px;
+            width: 100%;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.8rem;
+            pointer-events: none;
+            z-index: 10;
+        }
+    </style>
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="ui-layer">
+        <div class="hud-top">
+            <div class="hud-left">
+                <div>SKOR: <span id="score-val">0</span></div>
+                <div>EN İYİ: <span id="highscore-val">0</span></div>
+                <div class="combo-box">KOMBO: x<span id="combo-val">1</span></div>
+            </div>
+            <div>HIZ: <span id="speed-val">120</span> KM/H</div>
+            <div class="hud-controls">
+                <button class="cyber-btn-sm" id="sound-btn">SES: AÇIK</button>
+                <button class="cyber-btn-sm" id="pause-btn">DURDUR</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="screen-overlay">
+        <h1 id="overlay-title">CYBER SPACE 2077</h1>
+        <p id="overlay-desc">Gelişmiş uzay geminle engellerden kaç, neon kristalleri topla ve yüksek skora ulaş!</p>
+        <button class="cyber-btn" id="start-btn">SİSTEMİ BAŞLAT</button>
+    </div>
+
+    <div class="controls-hint">Mobilde Sola/Sağa Kaydır | Klavyede A/D veya Ok Tuşları</div>
+
+    <script>
+        'use strict';
+
+        // Tum kodlar DOM tam yuklendikten sonra calisir (DOM Yukleme Garantisi)
+        document.addEventListener('DOMContentLoaded', () => {
+
+            // --- 1. WEB AUDIO API SES MOTORU (Try-Catch Bloklu) ---
+            class SoundEngine {
+                constructor() {
+                    this.ctx = null;
+                    this.enabled = true;
+                    this.bgmInterval = null;
+                    this.bgmStep = 0;
+                }
+
+                init() {
+                    try {
+                        if (!this.ctx) {
+                            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                            if (AudioCtx) this.ctx = new AudioCtx();
+                        }
+                        if (this.ctx && this.ctx.state === 'suspended') {
+                            this.ctx.resume().catch(() => {});
+                        }
+                    } catch (e) {
+                        console.warn("Web Audio API başlatılamadı:", e);
+                    }
+                }
+
+                playMove() {
+                    if (!this.enabled || !this.ctx) return;
+                    try {
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(300, this.ctx.currentTime);
+                        osc.frequency.exponentialRampToValueAtTime(700, this.ctx.currentTime + 0.08);
+                        gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.08);
+                        osc.connect(gain); gain.connect(this.ctx.destination);
+                        osc.start(); osc.stop(this.ctx.currentTime + 0.08);
+                    } catch (e) {}
+                }
+
+                playCollect() {
+                    if (!this.enabled || !this.ctx) return;
+                    try {
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(523.25, this.ctx.currentTime);
+                        osc.frequency.setValueAtTime(659.25, this.ctx.currentTime + 0.06);
+                        osc.frequency.setValueAtTime(783.99, this.ctx.currentTime + 0.12);
+                        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+                        osc.connect(gain); gain.connect(this.ctx.destination);
+                        osc.start(); osc.stop(this.ctx.currentTime + 0.2);
+                    } catch (e) {}
+                }
+
+                playCrash() {
+                    if (!this.enabled || !this.ctx) return;
+                    try {
+                        const bufferSize = this.ctx.sampleRate * 0.4;
+                        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                        const data = buffer.getChannelData(0);
+                        for (let i = 0; i < bufferSize; i++) {
+                            data[i] = Math.random() * 2 - 1;
+                        }
+                        const noise = this.ctx.createBufferSource();
+                        noise.buffer = buffer;
+                        const gain = this.ctx.createGain();
+                        gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.4);
+                        noise.connect(gain); gain.connect(this.ctx.destination);
+                        noise.start(); noise.stop(this.ctx.currentTime + 0.4);
+                    } catch (e) {}
+                }
+
+                startBGM() {
+                    this.stopBGM();
+                    this.bgmInterval = setInterval(() => {
+                        if (gameState === STATES.PLAYING && this.enabled && this.ctx) {
+                            try {
+                                const notes = [110, 110, 146.83, 130.81];
+                                const note = notes[this.bgmStep % notes.length];
+                                const osc = this.ctx.createOscillator();
+                                const gain = this.ctx.createGain();
+                                osc.type = 'sawtooth';
+                                osc.frequency.setValueAtTime(note, this.ctx.currentTime);
+                                gain.gain.setValueAtTime(0.04, this.ctx.currentTime);
+                                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.12);
+                                osc.connect(gain); gain.connect(this.ctx.destination);
+                                osc.start(); osc.stop(this.ctx.currentTime + 0.12);
+                                this.bgmStep++;
+                            } catch (e) {}
+                        }
+                    }, 130);
+                }
+
+                stopBGM() {
+                    if (this.bgmInterval) {
+                        clearInterval(this.bgmInterval);
+                        this.bgmInterval = null;
+                    }
+                }
+            }
+
+            const sound = new SoundEngine();
+
+            // --- 2. OYUN DURUMU VE DEĞİŞKENLERİ ---
+            const STATES = { MENU: 0, PLAYING: 1, PAUSED: 2, GAMEOVER: 3 };
+            let gameState = STATES.MENU;
+
+            let score = 0;
+            let combo = 1;
+            let highScore = localStorage.getItem('cyber_best_score') || 0;
+            let gameSpeed = 38;
+            let distanceTraveled = 0;
+            let colorCycleTimer = 0;
+            let cameraShake = 0;
+
+            const lanes = [-3.5, 0, 3.5];
+            let currentLaneIndex = 1;
+
+            let scene, camera, renderer, clock;
+            let spaceship, roadGrid, sunMesh;
+            let obstacles = [];
+            let crystals = [];
+            let particles, exhaustParticles;
+
+            let touchStartX = 0;
+            let touchStartY = 0;
+
+            document.getElementById('highscore-val').innerText = Math.floor(highScore);
+
+            // --- 3. BAŞLATMA VE KURULUM ---
+            function init() {
+                clock = new THREE.Clock();
+
+                scene = new THREE.Scene();
+                scene.fog = new THREE.FogExp2(0x030008, 0.012);
+
+                camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
+                camera.position.set(0, 4.5, -9);
+
+                renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                renderer.toneMapping = THREE.ACESFilmicToneMapping;
+                document.body.appendChild(renderer.domElement);
+
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+                scene.add(ambientLight);
+
+                const dirLight = new THREE.DirectionalLight(0x00ffff, 2.5);
+                dirLight.position.set(10, 25, -10);
+                scene.add(dirLight);
+
+                createEnvironment();
+                createSpaceship();
+                createParticles();
+                createExhaust();
+
+                window.addEventListener('resize', onWindowResize);
+                setupInputListeners();
+                bindUIButtons();
+
+                animate();
+            }
+
+            // --- 4. BUTON VE DOKUNMATİK TIKLAMA ÇAKIŞMA ÖNLEYİCİSİ ---
+            function bindUIButtons() {
+                const startBtn = document.getElementById('start-btn');
+                const pauseBtn = document.getElementById('pause-btn');
+                const soundBtn = document.getElementById('sound-btn');
+
+                const handleStart = (e) => {
+                    if (e) {
+                        e.stopPropagation();
+                        e.preventDefault();
+                    }
+                    sound.init();
+                    sound.startBGM();
+
+                    if (gameState === STATES.PAUSED) {
+                        togglePause();
+                    } else {
+                        startGame();
+                    }
+                };
+
+                // Pointer Events ile dokunmatik ve tıklama stabilizasyonu
+                startBtn.addEventListener('pointerdown', handleStart);
+                pauseBtn.addEventListener('pointerdown', (e) => {
+                    e.stopPropagation();
+                    togglePause();
+                });
+                soundBtn.addEventListener('pointerdown', (e) => {
+                    e.stopPropagation();
+                    toggleSound();
+                });
+            }
+
+            function createEnvironment() {
+                const gridHelper = new THREE.GridHelper(500, 100, 0xff00ff, 0x00ffff);
+                gridHelper.position.set(0, -0.05, 150);
+                scene.add(gridHelper);
+                roadGrid = gridHelper;
+
+                const roadGeo = new THREE.PlaneGeometry(12, 500);
+                const roadMat = new THREE.MeshStandardMaterial({ 
+                    color: 0x05020d, 
+                    roughness: 0.1, 
+                    metalness: 0.9 
+                });
+                const road = new THREE.Mesh(roadGeo, roadMat);
+                road.rotation.x = -Math.PI / 2;
+                road.position.set(0, -0.1, 150);
+                scene.add(road);
+
+                const sunGeo = new THREE.CircleGeometry(30, 32);
+                const sunMat = new THREE.MeshBasicMaterial({ color: 0xff0077, fog: false });
+                sunMesh = new THREE.Mesh(sunGeo, sunMat);
+                sunMesh.position.set(0, 15, 300);
+                scene.add(sunMesh);
+            }
+
+            function createSpaceship() {
+                const shipGroup = new THREE.Group();
+
+                const bodyGeo = new THREE.ConeGeometry(0.7, 3.2, 4);
+                bodyGeo.rotateX(Math.PI / 2);
+                const bodyMat = new THREE.MeshStandardMaterial({
+                    color: 0x00ffff,
+                    roughness: 0.2,
+                    metalness: 0.9,
+                    emissive: 0x0055ff,
+                    emissiveIntensity: 0.5
+                });
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                body.position.y = 0.4;
+                shipGroup.add(body);
+
+                const wingGeo = new THREE.BoxGeometry(2.6, 0.08, 1.2);
+                const wingMat = new THREE.MeshStandardMaterial({ 
+                    color: 0xff00ff, 
+                    roughness: 0.3,
+                    metalness: 0.8,
+                    emissive: 0xff00aa,
+                    emissiveIntensity: 0.6
+                });
+                const wings = new THREE.Mesh(wingGeo, wingMat);
+                wings.position.set(0, 0.3, -0.4);
+                shipGroup.add(wings);
+
+                const engineGeo = new THREE.CylinderGeometry(0.3, 0.4, 0.6, 8);
+                engineGeo.rotateX(Math.PI / 2);
+                const engineMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+                const engine = new THREE.Mesh(engineGeo, engineMat);
+                engine.position.set(0, 0.35, -1.5);
+                shipGroup.add(engine);
+
+                shipGroup.position.set(lanes[currentLaneIndex], 0.2, 0);
+                scene.add(shipGroup);
+                spaceship = shipGroup;
+            }
+
+            function createExhaust() {
+                const count = 30;
+                const geometry = new THREE.BufferGeometry();
+                const positions = new Float32Array(count * 3);
+                for (let i = 0; i < count * 3; i += 3) {
+                    positions[i] = 0;
+                    positions[i + 1] = 0.35;
+                    positions[i + 2] = -1.5;
+                }
+                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                const material = new THREE.PointsMaterial({
+                    color: 0x00ffff,
+                    size: 0.3,
+                    transparent: true,
+                    opacity: 0.8
+                });
+                exhaustParticles = new THREE.Points(geometry, material);
+                scene.add(exhaustParticles);
+            }
+
+            function createParticles() {
+                const count = 400;
+                const geometry = new THREE.BufferGeometry();
+                const positions = new Float32Array(count * 3);
+
+                for (let i = 0; i < count * 3; i += 3) {
+                    positions[i] = (Math.random() - 0.5) * 40;
+                    positions[i + 1] = Math.random() * 20;
+                    positions[i + 2] = (Math.random() - 0.5) * 250;
+                }
+
+                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                const material = new THREE.PointsMaterial({
+                    color: 0x00ffff,
+                    size: 0.25,
+                    transparent: true,
+                    opacity: 0.8
+                });
+
+                particles = new THREE.Points(geometry, material);
+                scene.add(particles);
+            }
+
+            function setupInputListeners() {
+                window.addEventListener('keydown', (e) => {
+                    if (gameState !== STATES.PLAYING) return;
+                    if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+                        moveLane(-1);
+                    } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+                        moveLane(1);
+                    }
+                });
+
+                window.addEventListener('touchstart', (e) => {
+                    if (e.target.closest('#screen-overlay') || e.target.closest('.hud-controls')) return;
+                    touchStartX = e.touches[0].clientX;
+                    touchStartY = e.touches[0].clientY;
+                }, { passive: true });
+
+                window.addEventListener('touchend', (e) => {
+                    if (gameState !== STATES.PLAYING) return;
+                    if (e.target.closest('#screen-overlay') || e.target.closest('.hud-controls')) return;
+                    const deltaX = e.changedTouches[0].clientX - touchStartX;
+                    const deltaY = e.changedTouches[0].clientY - touchStartY;
+
+                    if (Math.abs(deltaX) > Math.ab
